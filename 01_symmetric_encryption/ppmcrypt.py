@@ -2,6 +2,7 @@ import string
 import secrets
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Cipher import AES
+from PIL import Image
 
 
 class PPMImage:
@@ -42,6 +43,12 @@ class PPMImage:
         """Make a human-readable description of the image."""
         return f'<PPMImage: width={self.width}, height={self.height}, comments={self.comments}, data_size={len(self.data)}>'
 
+    def pad(self):
+        self.data = pad(self.data, 16)
+
+    def unpad(self):
+        self.data = unpad(self.data, 16)
+
     def encrypt(self, key, mode):
         """Use AES to encrypt the image data in-place.
 
@@ -59,10 +66,11 @@ class PPMImage:
         mode : string, one of 'ecb', 'cbc', 'ctr', 'gcm'
               mode of operation
         """
+        self.pad()
+
         if mode.lower() == 'ecb':
             # --------- add your code here --------
-            raise NotImplementedError(f'mode of operation {mode} not implemented')
-            # ciphertext = ???
+            ciphertext = AES.new(key, AES.MODE_ECB).encrypt(self.data)
             # ----- end add your code here --------
             # replace the image data with the ciphertext
             self.data = bytearray(ciphertext)
@@ -70,21 +78,22 @@ class PPMImage:
             self.comments.append(b'X-mode: ecb')
         elif mode.lower() == 'cbc':
             # --------- add your code here --------
-            raise NotImplementedError(f'mode of operation {mode} not implemented')
-            # iv = ???
-            # ciphertext = ???
+            cihper = AES.new(key, AES.MODE_CBC)
+            ciphertext = cipher.encrypt(self.data)
             # ----- end add your code here --------
             # replace the image data with the ciphertext
             self.data = bytearray(ciphertext)
             # add a comment that we use CBC mode
             self.comments.append(b'X-mode: cbc')
             # store the IV in a comment
-            self.comments.append(f'X-iv: {iv.hex()}'.encode())
+            self.comments.append(f'X-iv: {cipher.iv.hex()}'.encode())
         elif mode.lower() == 'ctr':
             # --------- add your code here --------
-            raise NotImplementedError(f'mode of operation {mode} not implemented')
+
+            cipher = AES.new(key, AES.MODE_CTR)
+            ciphertext = cipher.encrypt(self.data) 
+            
             # nonce = ???
-            # ciphertext = ???
             # ----- end add your code here --------
             # replace the image data with the ciphertext
             self.data = bytearray(ciphertext)
@@ -92,12 +101,13 @@ class PPMImage:
             self.comments.append(b'X-mode: ctr')
             # store the nonce in a comment
             self.comments.append(f'X-nonce: {nonce.hex()}'.encode())
+
         elif mode.lower() == 'gcm':
             # --------- add your code here --------
-            raise NotImplementedError(f'mode of operation {mode} not implemented')
-            # nonce = ???
-            # ciphertext = ???
-            # tag = ???
+            
+            cipher = AES.new(key, AES.MODE_GCM)
+            ciphertext, tag = cipher.encrypt_and_digest(data)
+
             # ----- end add your code here --------
             # replace the image data with the ciphertext
             self.data = bytearray(ciphertext)
@@ -106,7 +116,7 @@ class PPMImage:
             # store the authentication tag in a comment
             self.comments.append(f'X-tag: {tag.hex()}'.encode())
             # store the nonce in a comment
-            self.comments.append(f'X-nonce: {nonce.hex()}'.encode())
+            self.comments.append(f'X-nonce: {cipher.nonce.hex()}'.encode())
         else:
             raise NotImplementedError(f'unknown mode of operation {mode}')
 
@@ -146,8 +156,10 @@ class PPMImage:
 
         if mode.lower() == 'ecb':
             # --------- add your code here --------
-            raise NotImplementedError(f'mode of operation {mode} not implemented')
-            # plaintext = ???
+            
+            cipher = AES.new(key, AES.MODE_ECB)
+            plaintext = cipher.decrypt(self.data)
+
             # ----- end add your code here --------
             # replace the image data with the plaintext
             self.data = bytearray(plaintext)
@@ -157,19 +169,21 @@ class PPMImage:
             # Read the used IV from the comments
             iv = bytes.fromhex(find_property_in_comments('iv'))
             # --------- add your code here --------
-            raise NotImplementedError(f'mode of operation {mode} not implemented')
-            # plaintext = ???
+            cipher = AES.new(key, AES.MODE_CBC, iv)
+            plaintext = cipher.decrypt(self.data)
+
             # ----- end add your code here --------
             # replace the image data with the plaintext
             self.data = bytearray(plaintext)
             # remove the comments where we stored the additional data
             cleanup_comments()
+
         elif mode.lower() == 'ctr':
             # Read the used nonce from the comments
             nonce = bytes.fromhex(find_property_in_comments('nonce'))
             # --------- add your code here --------
-            raise NotImplementedError(f'mode of operation {mode} not implemented')
-            # plaintext = ???
+            cipher = AES.new(key, AES.MODE_CTR, nonce)
+            plaintext = cipher.decrypt(self.data)
             # ----- end add your code here --------
             # replace the image data with the plaintext
             self.data = bytearray(plaintext)
@@ -181,8 +195,9 @@ class PPMImage:
             # Read the authentication tag from the comments
             tag = bytes.fromhex(find_property_in_comments('tag'))
             # --------- add your code here --------
-            raise NotImplementedError(f'mode of operation {mode} not implemented')
-            # plaintext = ???
+            cipher = AES.new(key, AES.MODE_GCM, nonce)
+            plaintext = cipher.decrypt_and_verify(self.data, tag)
+
             # ----- end add your code here --------
             # replace the image data with the plaintext
             self.data = bytearray(plaintext)
@@ -190,6 +205,8 @@ class PPMImage:
             cleanup_comments()
         else:
             raise NotImplementedError(f'unknown mode of operation {mode}')
+    
+        self.unpad()
 
     @property
     def size(self):
@@ -305,6 +322,18 @@ class PPMImage:
         file.write(header.encode())
         file.write(self.data)
 
+    @property
+    def dimensions(self):
+        return (self.width, self.height)
+
+    def to_image(self):
+        return Image.frombytes("RGB", self.dimensions, bytes(self.data))
+
+    def show(self):
+        image = self.to_image()
+        image.show("image")
+
+
 
 def test():
     """Simple test of correctness."""
@@ -322,4 +351,26 @@ def test():
 
 if __name__ == '__main__':
     # The following is executed if you run `python3 ppmcrypt.py`.
-    test()
+    #test()
+
+
+    image = PPMImage.load_from_file(open('security.ppm', 'rb'))
+    print(f'image width: {image.width} px')
+    print(f'image height: {image.height} px')
+    print(f'first 16 bytes of that data: {image.data[:16].hex()}')
+
+
+    #image = PPMImage.load_from_file(open('dk.ppm', 'rb'))
+    #key = secrets.token_bytes(16)
+    #image.encrypt(key, 'ecb')
+    #image.write_to_file(open('image_encrypted.ppm', 'wb'))
+
+
+    # make the first 1000 pixel blue
+    #image.data[:3 * 1000] = bytes.fromhex('0000FF') * 1000
+    #image.write_to_file(open('new_image.ppm', 'wb'))
+
+    #image.decrypt(key)
+
+    image.show()
+
